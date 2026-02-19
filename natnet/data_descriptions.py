@@ -345,16 +345,28 @@ class DataDescriptions(
         dataset_count = buffer.read_uint32()
         for i in range(0, dataset_count):
             data_type = buffer.read_uint32()
+            dataset_end_pointer = None
+
             if protocol_version >= Version(4, 1):
                 _dataset_size = buffer.read_uint32()
+                dataset_end_pointer = buffer.pointer + _dataset_size
+
             if data_type in data_desc_types:
                 name, desc_type = data_desc_types[data_type]
-                unpacked_data = desc_type.read_from_buffer(buffer, protocol_version)
-                data_dict[name].append(unpacked_data)
+                try:
+                    unpacked_data = desc_type.read_from_buffer(buffer, protocol_version)
+                    data_dict[name].append(unpacked_data)
+                except Exception as e:
+                    print(f"Skipping malformed data description {name}: {e}")
+
             else:
                 raise NatNetProtocolError(
                     f"Unknown data type {data_type} encountered while parsing data descriptions. "
                     f"Stopped processing at {buffer.pointer}/{len(buffer.data)} bytes, "
                     f"({i + 1}/{dataset_count}) datasets."
                 )
+
+            if dataset_end_pointer is not None:
+                buffer.pointer = dataset_end_pointer
+
         return DataDescriptions(**data_dict)
